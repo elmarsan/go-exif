@@ -11,10 +11,7 @@ import (
 
 	"encoding/binary"
 
-	"github.com/dsoprea/go-logging"
-
-	"github.com/dsoprea/go-exif/v3/common"
-	"github.com/dsoprea/go-exif/v3/undefined"
+	log "github.com/dsoprea/go-logging"
 )
 
 var (
@@ -874,6 +871,45 @@ func (ifd *Ifd) Thumbnail() (data []byte, err error) {
 	}
 
 	return ifd.thumbnailData, nil
+}
+
+// FindDateTimeTag returns a DateTime if exists
+// It handles a bug in PENTAX Optio M20 Model where year is saved wrong
+func (ifd *Ifd) FindDateTimeTag() (*time.Time, error) {
+	results, err := ifd.FindTagWithName("Model")
+	if err != nil {
+		log.Panic(err)
+	}
+
+	if len(results) != 1 {
+		return nil, fmt.Errorf("there wasn't exactly one result")
+	}
+
+	model, err := results[0].Format()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	results, err = ifd.FindTagWithName("DateTime")
+
+	if len(results) != 1 {
+		return nil, fmt.Errorf("there wasn't exactly one result")
+	}
+
+	timeString, err := results[0].Format()
+
+	tm, err := time.Parse("2006:01:02 15:04:05", timeString)
+	if err != nil {
+		return nil, fmt.Errorf("Parsing DateTime Tag %v", err)
+	}
+
+	// Handle bug of this device model
+	if model == "PENTAX Optio M20" {
+		fixedTm := tm.AddDate(1, 0, 0)
+		return &fixedTm, nil
+	}
+
+	return &tm, nil
 }
 
 // dumpTags recursively builds a list of tags from an IFD.
